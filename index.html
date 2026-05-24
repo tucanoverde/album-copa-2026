@@ -537,7 +537,7 @@ function renderAlbum() {
 
   let html = `
     <div class="help-banner">
-      ${currentUser.emoji} <strong>${currentUser.name}</strong> — Clique numa figurinha pra marcar <strong>tenho</strong>. Clique de novo pra somar <strong>repetidas</strong>. Botão direito (ou segurar) reseta.
+      ${currentUser.emoji} <strong>${currentUser.name}</strong> — Clique pra <strong>adicionar +1</strong> (falta → tenho → +repetidas). Clique direito (ou segure no celular) pra <strong>tirar 1</strong> (ex: quando trocou). Segure mais tempo pra zerar.
     </div>
     <div class="stats-row">
       <div class="stat-card green"><span class="lbl">Coladas</span><span class="val">${coladas}</span></div>
@@ -559,7 +559,7 @@ function renderAlbum() {
       const o = mySticks[s.code] || 0;
       const cls = o === 0 ? '' : (o === 1 ? 'tenho' : 'rep');
       const badge = o >= 2 ? `<span class="qty-badge">+${o-1}</span>` : '';
-      html += `<div class="sticker ${cls}" onclick="bumpStick('${s.code}')" oncontextmenu="resetStick('${s.code}', event)" ontouchstart="touchStart('${s.code}')" ontouchend="touchEnd()" title="${escapeHtml(s.code)} — ${escapeHtml(s.label)}">
+      html += `<div class="sticker ${cls}" onclick="bumpStickClick('${s.code}', event)" oncontextmenu="decStick('${s.code}', event)" ontouchstart="touchStart('${s.code}')" ontouchend="touchEnd()" title="${escapeHtml(s.code)} — ${escapeHtml(s.label)}">
         ${badge}<span class="num">${escapeHtml(s.code)}</span><span class="name">${escapeHtml(s.label)}</span>
       </div>`;
     }
@@ -598,7 +598,7 @@ function renderAlbum() {
           const badge = o >= 2 ? `<span class="qty-badge">+${o-1}</span>` : '';
           const name = stickerLabel(teamCode, n);
           const ico = n === 1 ? '🛡️ ' : n === 13 ? '📷 ' : '';
-          html += `<div class="sticker ${cls}" onclick="bumpStick('${code}')" oncontextmenu="resetStick('${code}', event)" ontouchstart="touchStart('${code}')" ontouchend="touchEnd()" title="${code} — ${escapeHtml(name)}">
+          html += `<div class="sticker ${cls}" onclick="bumpStickClick('${code}', event)" oncontextmenu="decStick('${code}', event)" ontouchstart="touchStart('${code}')" ontouchend="touchEnd()" title="${code} — ${escapeHtml(name)}">
             ${badge}<span class="num">${code}</span><span class="name">${ico}${escapeHtml(name)}</span>
           </div>`;
         }
@@ -615,12 +615,24 @@ function toggleGroup(id) {
   render();
 }
 
-let _touchTimer = null, _touchCode = null;
+let _touchTimer = null, _touchCode = null, _touchDecremented = false;
 function touchStart(code) {
   _touchCode = code;
-  _touchTimer = setTimeout(() => { resetStick(_touchCode); _touchTimer = null; }, 600);
+  _touchDecremented = false;
+  // 500ms: -1 (suave). 1500ms: reset total (mantém pressionado mais)
+  _touchTimer = setTimeout(() => {
+    decStick(_touchCode);
+    _touchDecremented = true;
+    _touchTimer = setTimeout(() => { resetStick(_touchCode); _touchTimer = null; }, 1000);
+  }, 500);
 }
 function touchEnd() { if (_touchTimer) clearTimeout(_touchTimer); _touchTimer = null; }
+
+// Para ignorar o "click" disparado depois do long-press no mobile
+function bumpStickClick(code, evt) {
+  if (_touchDecremented) { _touchDecremented = false; return; }
+  bumpStick(code);
+}
 
 async function bumpStick(code) {
   const cur = mySticks[code] || 0;
@@ -628,6 +640,16 @@ async function bumpStick(code) {
   mySticks[code] = next;
   await saveStick(code, next);
   render();
+}
+async function decStick(code, evt) {
+  if (evt) evt.preventDefault();
+  const cur = mySticks[code] || 0;
+  const next = Math.max(0, cur - 1);
+  if (next === cur) return false;
+  mySticks[code] = next;
+  await saveStick(code, next);
+  render();
+  return false;
 }
 async function resetStick(code, evt) {
   if (evt) evt.preventDefault();
