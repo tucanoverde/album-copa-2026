@@ -166,13 +166,12 @@
     display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 6px;
   }
   .sticker {
-    border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+    border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; justify-content: space-between;
     background: var(--falta-bg); border: 1px dashed var(--wc-border); color: var(--wc-muted);
-    cursor: pointer; user-select: none; transition: all 0.12s;
-    font-weight: 700; position: relative; padding: 6px 6px 8px; min-height: 70px;
-    text-align: center; gap: 2px;
+    user-select: none; transition: all 0.12s;
+    font-weight: 700; position: relative; padding: 6px 6px 4px; min-height: 96px;
+    text-align: center; gap: 4px;
   }
-  .sticker:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
   .sticker.tenho { background: var(--tenho-bg); color: #fff; border: 1px solid transparent; }
   .sticker.rep   { background: var(--rep-bg); color: #fff; border: 1px solid transparent; }
   .sticker .num { font-size: 11px; font-weight: 800; opacity: 0.85; letter-spacing: 0.5px; }
@@ -180,13 +179,48 @@
     font-size: 12px; font-weight: 700; line-height: 1.15;
     overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
     -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    word-break: break-word;
+    word-break: break-word; flex: 1;
   }
   .sticker .qty-badge {
     position: absolute; top: 4px; right: 4px; background: #fff; color: var(--wc-dark);
     border-radius: 10px; min-width: 22px; height: 18px; padding: 0 5px;
     display: flex; align-items: center; justify-content: center;
     font-size: 10px; font-weight: 800; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .qty-controls {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 4px; gap: 4px;
+  }
+  .qty-btn {
+    flex: 1; border: 0; border-radius: 6px;
+    height: 28px; font-size: 16px; font-weight: 900; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.08s, background 0.12s;
+    user-select: none; -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .qty-btn:active { transform: scale(0.92); }
+  .qty-btn.minus {
+    background: rgba(0,0,0,0.08); color: var(--wc-text);
+  }
+  .qty-btn.minus:disabled {
+    opacity: 0.25; cursor: not-allowed;
+  }
+  .qty-btn.plus {
+    background: var(--wc-green); color: #fff;
+    box-shadow: 0 2px 4px rgba(0,119,73,0.3);
+  }
+  .qty-btn.plus:hover { background: #00a86b; }
+  .sticker.tenho .qty-btn.minus,
+  .sticker.rep .qty-btn.minus {
+    background: rgba(255,255,255,0.3); color: #fff;
+  }
+  .sticker.tenho .qty-btn.plus,
+  .sticker.rep .qty-btn.plus {
+    background: rgba(255,255,255,0.85); color: var(--wc-dark); box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  }
+  .qty-display {
+    font-size: 11px; font-weight: 800; padding: 0 4px; min-width: 26px;
   }
   .special-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
 
@@ -537,7 +571,7 @@ function renderAlbum() {
 
   let html = `
     <div class="help-banner">
-      ${currentUser.emoji} <strong>${currentUser.name}</strong> — Clique pra <strong>adicionar +1</strong> (falta → tenho → +repetidas). Clique direito (ou segure no celular) pra <strong>tirar 1</strong> (ex: quando trocou). Segure mais tempo pra zerar.
+      ${currentUser.emoji} <strong>${currentUser.name}</strong> — Use os botões <strong>+</strong> (adicionar) e <strong>−</strong> (tirar) em cada figurinha. Sequência: <em>falta → tenho → +1 repetida → +2 → ...</em>. Trocou alguma? Clica no <strong>−</strong> pra abater.
     </div>
     <div class="stats-row">
       <div class="stat-card green"><span class="lbl">Coladas</span><span class="val">${coladas}</span></div>
@@ -559,8 +593,12 @@ function renderAlbum() {
       const o = mySticks[s.code] || 0;
       const cls = o === 0 ? '' : (o === 1 ? 'tenho' : 'rep');
       const badge = o >= 2 ? `<span class="qty-badge">+${o-1}</span>` : '';
-      html += `<div class="sticker ${cls}" onclick="bumpStickClick('${s.code}', event)" oncontextmenu="decStick('${s.code}', event)" ontouchstart="touchStart('${s.code}')" ontouchend="touchEnd()" title="${escapeHtml(s.code)} — ${escapeHtml(s.label)}">
+      html += `<div class="sticker ${cls}" title="${escapeHtml(s.code)} — ${escapeHtml(s.label)}">
         ${badge}<span class="num">${escapeHtml(s.code)}</span><span class="name">${escapeHtml(s.label)}</span>
+        <div class="qty-controls">
+          <button class="qty-btn minus" onclick="decStick('${s.code}', event)" ${o === 0 ? 'disabled' : ''} aria-label="Tirar 1">−</button>
+          <button class="qty-btn plus" onclick="bumpStick('${s.code}')" aria-label="Adicionar 1">+</button>
+        </div>
       </div>`;
     }
     html += `</div></div>`;
@@ -598,8 +636,12 @@ function renderAlbum() {
           const badge = o >= 2 ? `<span class="qty-badge">+${o-1}</span>` : '';
           const name = stickerLabel(teamCode, n);
           const ico = n === 1 ? '🛡️ ' : n === 13 ? '📷 ' : '';
-          html += `<div class="sticker ${cls}" onclick="bumpStickClick('${code}', event)" oncontextmenu="decStick('${code}', event)" ontouchstart="touchStart('${code}')" ontouchend="touchEnd()" title="${code} — ${escapeHtml(name)}">
+          html += `<div class="sticker ${cls}" title="${code} — ${escapeHtml(name)}">
             ${badge}<span class="num">${code}</span><span class="name">${ico}${escapeHtml(name)}</span>
+            <div class="qty-controls">
+              <button class="qty-btn minus" onclick="decStick('${code}', event)" ${o === 0 ? 'disabled' : ''} aria-label="Tirar 1">−</button>
+              <button class="qty-btn plus" onclick="bumpStick('${code}')" aria-label="Adicionar 1">+</button>
+            </div>
           </div>`;
         }
         html += `</div></div>`;
