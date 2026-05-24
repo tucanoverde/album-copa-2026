@@ -340,6 +340,84 @@
 
   .empty-state { text-align: center; padding: 60px 20px; color: var(--wc-muted); }
 
+  /* ========== EXPORTAR / PRINT ========== */
+  .export-btn {
+    background: var(--wc-gold); color: var(--wc-dark); border: 0;
+    padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 800;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    box-shadow: 0 2px 6px rgba(249,178,51,0.4);
+  }
+  .export-btn:hover { background: #e09a00; }
+  .export-actions {
+    display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .report-back {
+    background: #fff; border: 1px solid var(--wc-border); padding: 10px 16px;
+    border-radius: 8px; cursor: pointer; font-weight: 700; color: var(--wc-text);
+  }
+  .report-page {
+    background: #fff; max-width: 900px; margin: 0 auto; padding: 32px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08); border-radius: 12px;
+  }
+  .report-header {
+    border-bottom: 3px solid var(--wc-blue); padding-bottom: 14px; margin-bottom: 18px;
+    display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;
+  }
+  .report-header h1 { margin: 0 0 4px; font-size: 22px; color: var(--wc-dark); }
+  .report-header .sub { color: var(--wc-muted); font-size: 13px; }
+  .report-stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;
+    margin-bottom: 20px;
+  }
+  .report-stats .box {
+    border: 1px solid var(--wc-border); border-radius: 8px; padding: 10px 12px;
+  }
+  .report-stats .box .lb { font-size: 10px; text-transform: uppercase; color: var(--wc-muted); font-weight: 700; }
+  .report-stats .box .vl { font-size: 22px; font-weight: 900; color: var(--wc-blue); }
+  .report-section { margin-top: 22px; page-break-inside: avoid; }
+  .report-section h2 {
+    background: linear-gradient(135deg, var(--wc-red), var(--wc-blue));
+    color: #fff; padding: 6px 12px; font-size: 15px; margin: 0 0 10px; border-radius: 6px;
+  }
+  .report-team {
+    margin-bottom: 14px; page-break-inside: avoid;
+  }
+  .report-team .head {
+    font-weight: 800; font-size: 14px; margin-bottom: 4px;
+    border-bottom: 1px dashed var(--wc-border); padding-bottom: 4px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .report-team .head .flag-em { font-size: 18px; }
+  .report-team .head .count {
+    margin-left: auto; font-size: 11px; color: var(--wc-muted); font-weight: 600;
+  }
+  .report-team ul {
+    list-style: none; padding: 0; margin: 0; columns: 2; gap: 10px;
+    font-size: 12px;
+  }
+  .report-team li {
+    padding: 2px 0; break-inside: avoid;
+  }
+  .report-team li .code {
+    font-family: ui-monospace, monospace; color: var(--wc-blue); font-weight: 700; margin-right: 4px;
+  }
+  .report-team li .qty {
+    color: var(--wc-red); font-weight: 700; margin-left: 4px;
+  }
+  .report-footer {
+    margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--wc-border);
+    font-size: 11px; color: var(--wc-muted); text-align: center;
+  }
+
+  @media print {
+    body { background: #fff; }
+    header.app-header, nav.tabs, .export-actions, .help-banner { display: none !important; }
+    main { padding: 0; max-width: 100%; }
+    .report-page { box-shadow: none; padding: 0; max-width: 100%; }
+    .report-section { break-inside: avoid; }
+    .report-team { break-inside: avoid; }
+  }
+
   @media (max-width: 600px) {
     main { padding: 12px; }
     header.app-header { padding: 12px 16px; }
@@ -552,7 +630,129 @@ function render() {
   else if (currentTab === 'trocas') body = renderTrocas();
   else if (currentTab === 'ranking') body = renderRanking();
   else if (currentTab === 'penalidades') body = renderPenalidades();
+  else if (currentTab === 'exportar') body = renderExportReport();
   document.getElementById('appRoot').innerHTML = tabs + `<main>${body}</main>`;
+}
+
+// ========================================================
+// EXPORTAÇÃO PDF (printable report)
+// ========================================================
+function renderExportReport() {
+  const totalCount = ALBUM.special.length + ALBUM.groups.length * 4 * 20;
+  let coladas = 0, repetidas = 0;
+  for (const code in mySticks) {
+    const o = mySticks[code];
+    if (o >= 1) coladas++;
+    if (o >= 2) repetidas += o - 1;
+  }
+  const faltam = totalCount - coladas;
+  const pct = ((coladas / totalCount) * 100).toFixed(1);
+
+  const dataHoje = new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' });
+
+  // Coleta faltantes e repetidas
+  // Especiais
+  const espFaltantes = ALBUM.special.filter(s => !(mySticks[s.code] >= 1));
+  const espRepetidas = ALBUM.special.filter(s => mySticks[s.code] >= 2).map(s => ({...s, qty: mySticks[s.code] - 1}));
+
+  // Por seleção (organizado por grupo)
+  const timesFaltantes = [], timesRepetidas = [];
+  for (const g of ALBUM.groups) {
+    for (const teamCode of g.teams) {
+      const t = ALBUM.teams[teamCode];
+      const faltam = [], reps = [];
+      for (let n = 1; n <= 20; n++) {
+        const code = `${teamCode} ${n}`;
+        const o = mySticks[code] || 0;
+        const name = stickerLabel(teamCode, n);
+        if (o === 0) faltam.push({ code, n, name });
+        if (o >= 2) reps.push({ code, n, name, qty: o - 1 });
+      }
+      if (faltam.length > 0) timesFaltantes.push({ team: teamCode, t, faltam });
+      if (reps.length > 0) timesRepetidas.push({ team: teamCode, t, reps });
+    }
+  }
+
+  let html = `
+    <div class="export-actions">
+      <button class="report-back" onclick="setTab('album')">← Voltar</button>
+      <button class="export-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
+    </div>
+    <div class="report-page">
+      <div class="report-header">
+        <div>
+          <h1>🏆 Status do Álbum — ${escapeHtml(currentUser.name)} ${currentUser.emoji}</h1>
+          <div class="sub">Panini FIFA World Cup 2026 · Gerado em ${dataHoje}</div>
+        </div>
+      </div>
+
+      <div class="report-stats">
+        <div class="box"><div class="lb">Coladas</div><div class="vl" style="color:var(--wc-green)">${coladas}/${totalCount}</div></div>
+        <div class="box"><div class="lb">Faltam</div><div class="vl" style="color:var(--wc-red)">${faltam}</div></div>
+        <div class="box"><div class="lb">Repetidas</div><div class="vl" style="color:#e07900">${repetidas}</div></div>
+        <div class="box"><div class="lb">Progresso</div><div class="vl">${pct}%</div></div>
+      </div>
+
+      <div class="report-section">
+        <h2>❌ FALTAM PRA EU COMPLETAR — ${faltam} figurinhas</h2>`;
+
+  // Especiais faltantes
+  if (espFaltantes.length > 0) {
+    html += `<div class="report-team">
+      <div class="head">✨ Especiais (FWC + Logo Panini) <span class="count">${espFaltantes.length} faltam</span></div>
+      <ul>${espFaltantes.map(s => `<li><span class="code">${escapeHtml(s.code)}</span> ${escapeHtml(s.label)}</li>`).join('')}</ul>
+    </div>`;
+  }
+
+  // Times faltantes
+  for (const tf of timesFaltantes) {
+    html += `<div class="report-team">
+      <div class="head">
+        <span class="flag-em">${tf.t.flag}</span>
+        <span>${escapeHtml(tf.t.name)} (${tf.team})</span>
+        <span class="count">${tf.faltam.length} faltam</span>
+      </div>
+      <ul>${tf.faltam.map(s => `<li><span class="code">${escapeHtml(s.code)}</span> ${escapeHtml(s.name)}</li>`).join('')}</ul>
+    </div>`;
+  }
+
+  if (faltam === 0) {
+    html += `<p style="text-align:center;padding:20px;color:var(--wc-green);font-weight:700;font-size:18px">🎉 PARABÉNS! Você tem o álbum COMPLETO!</p>`;
+  }
+  html += `</div>`;
+
+  // ========== REPETIDAS ==========
+  html += `<div class="report-section">
+    <h2>🔄 REPETIDAS PRA TROCAR — ${repetidas} extras</h2>`;
+
+  if (espRepetidas.length > 0) {
+    html += `<div class="report-team">
+      <div class="head">✨ Especiais <span class="count">${espRepetidas.reduce((s,r)=>s+r.qty,0)} extras</span></div>
+      <ul>${espRepetidas.map(s => `<li><span class="code">${escapeHtml(s.code)}</span> ${escapeHtml(s.label)} <span class="qty">×${s.qty}</span></li>`).join('')}</ul>
+    </div>`;
+  }
+  for (const tr of timesRepetidas) {
+    const totalQty = tr.reps.reduce((s,r)=>s+r.qty,0);
+    html += `<div class="report-team">
+      <div class="head">
+        <span class="flag-em">${tr.t.flag}</span>
+        <span>${escapeHtml(tr.t.name)} (${tr.team})</span>
+        <span class="count">${totalQty} extras</span>
+      </div>
+      <ul>${tr.reps.map(s => `<li><span class="code">${escapeHtml(s.code)}</span> ${escapeHtml(s.name)} <span class="qty">×${s.qty}</span></li>`).join('')}</ul>
+    </div>`;
+  }
+  if (repetidas === 0) {
+    html += `<p style="text-align:center;padding:20px;color:var(--wc-muted);font-style:italic">Nenhuma repetida no momento.</p>`;
+  }
+  html += `</div>`;
+
+  html += `<div class="report-footer">
+    Álbum Copa 2026 — Família · tucanoverde.github.io/album-copa-2026
+  </div>
+  </div>`;
+
+  return html;
 }
 
 // ========================================================
@@ -572,6 +772,9 @@ function renderAlbum() {
   let html = `
     <div class="help-banner">
       ${currentUser.emoji} <strong>${currentUser.name}</strong> — Use os botões <strong>+</strong> (adicionar) e <strong>−</strong> (tirar) em cada figurinha. Sequência: <em>falta → tenho → +1 repetida → +2 → ...</em>. Trocou alguma? Clica no <strong>−</strong> pra abater.
+    </div>
+    <div class="export-actions">
+      <button class="export-btn" onclick="setTab('exportar')">📄 Exportar lista (PDF)</button>
     </div>
     <div class="stats-row">
       <div class="stat-card green"><span class="lbl">Coladas</span><span class="val">${coladas}</span></div>
